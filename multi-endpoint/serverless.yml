@@ -1,0 +1,89 @@
+service: multi-endpoint
+
+provider:
+  name: aws
+  runtime: python3.6
+  region: us-west-1
+
+resources:
+  Resources:
+    # define the service S3 Bucket
+    MultiEndpointBucket:
+      Type: AWS::S3::Bucket
+
+    # Create an IAM role for accessing the S3 Bucket
+    MultiEndpointRole:
+      Type: AWS::IAM::Role
+      Properties:
+        Path: /multiendpoint/
+        RoleName: MultiEndpointRole
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: MultiEndpointPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                  Resource:
+                    Fn::Join:
+                      - "/"
+                      - - Fn::GetAtt:
+                          - MultiEndpointBucket
+                          - Arn
+                        - "*"
+          - PolicyName: MultiEndpointLoggingPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource:
+                    Fn::GetAtt:
+                      - MultiEndpointLogGroup
+                      - Arn
+
+    MultiEndpointLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/lambda/multi-endpoint
+
+
+functions:
+  MultiEndpoint:
+    handler: main.handle_request
+    name: multi-endpoint
+    environment:
+      # set the environment variable on our function
+      S3_BUCKET:
+        Ref: MultiEndpointBucket
+    role:
+      # Give the function access to the S3 Bucket
+      Fn::GetAtt:
+        - MultiEndpointRole
+        - Arn
+    events:
+      # We only have two endpoints but we want to be able to respond to all HTTP methods
+      - http:
+          path: multi/{key}
+          method: get
+      - http:
+          path: multi/{key}
+          method: post
+      - http:
+          path: multi/{key}
+          method: put
+      - http:
+          path: multi/{key}
+          method: delete
